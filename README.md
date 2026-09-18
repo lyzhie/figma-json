@@ -18,6 +18,17 @@ screens/<figma-node-id>.json
 
 The ZIP contains hierarchy, relative geometry, Auto Layout, visible text, typography, component instances and variants, surface styles, reading order, and Prototype reactions. It deliberately does not infer user goals, product rationale, business rules, image contents, or visual quality.
 
+## Reading prototype flows
+
+Each flow in `flows.json` keeps the compatibility fields `screenIds` and `edgeIds`, and also includes a `graphType`: `single-screen`, `linear`, `branching`, `cyclic`, or `incomplete`.
+
+- `screenIds` is the set of reachable screens in export order. It is not guaranteed to be journey order.
+- For a `linear` flow, use `orderedScreenIds` and `steps`. Each step embeds its source screen, interaction details, and destination screen, so no cross-array lookup is needed.
+- For `branching`, `cyclic`, or `incomplete` flows, use `transitionsByScreen` and do not force the graph into a linear journey. Each reachable screen lists its incoming edge IDs and complete outgoing transitions.
+- `terminalScreenIds` is included on every flow. An unresolved transition keeps a screen from being labeled terminal, and makes the flow `incomplete`.
+
+Classification is conservative: an unresolved destination takes precedence as `incomplete`, then a detected cycle becomes `cyclic`; only a complete single chain is `linear`.
+
 ## Build and validate
 
 No dependency installation is required.
@@ -25,9 +36,10 @@ No dependency installation is required.
 ```bash
 npm run build
 npm test
+npm run package:release
 ```
 
-Runtime files are generated under `dist/`.
+Runtime files are generated under `dist/`. The release command rebuilds and validates the plugin, then writes `release/figma-json-plugin.zip` and verifies that its `dist/code.js` exactly matches the fresh build.
 
 ## Load in Figma Desktop
 

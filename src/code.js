@@ -558,49 +558,6 @@ async function buildEdges(screenDocuments) {
   return edges;
 }
 
-function reachableFrom(startId, edges) {
-  const visited = new Set([startId]);
-  const queue = [startId];
-
-  while (queue.length) {
-    const current = queue.shift();
-    for (const edge of edges) {
-      if (edge.sourceScreenId !== current || !edge.destinationScreenId) continue;
-      if (!visited.has(edge.destinationScreenId)) {
-        visited.add(edge.destinationScreenId);
-        queue.push(edge.destinationScreenId);
-      }
-    }
-  }
-  return visited;
-}
-
-function buildFlows(page, screenDocuments, edges) {
-  const includedIds = new Set(screenDocuments.map((document) => document.screen.id));
-  const flows = [];
-
-  for (const startingPoint of page.flowStartingPoints) {
-    if (!includedIds.has(startingPoint.nodeId)) continue;
-    const reachable = reachableFrom(startingPoint.nodeId, edges);
-    flows.push({
-      id: `flow-${startingPoint.nodeId.replace(/:/g, "-")}`,
-      name: startingPoint.name,
-      startingScreenId: startingPoint.nodeId,
-      screenIds: screenDocuments
-        .map((document) => document.screen.id)
-        .filter((id) => reachable.has(id)),
-      edgeIds: edges
-        .filter(
-          (edge) =>
-            reachable.has(edge.sourceScreenId) &&
-            (!edge.destinationScreenId || reachable.has(edge.destinationScreenId)),
-        )
-        .map((edge) => edge.id),
-    });
-  }
-  return flows;
-}
-
 function applyFlowCounts(screenDocuments, edges) {
   for (const document of screenDocuments) {
     document.flowContext.incomingEdgeCount = edges.filter(
@@ -754,7 +711,7 @@ async function createExport(mode) {
   }
 
   const edges = await buildEdges(screenDocuments);
-  const flows = buildFlows(page, screenDocuments, edges);
+  const flows = FigmaJsonFlowGraph.buildFlows(page, screenDocuments, edges);
   applyFlowCounts(screenDocuments, edges);
   const diagnostics = buildDiagnostics(screenDocuments, edges, flows);
   const exportedAt = new Date().toISOString();
@@ -798,6 +755,9 @@ async function createExport(mode) {
       componentInstances: true,
       componentVariants: true,
       prototypeConnections: true,
+      flowGraphClassification: true,
+      linearFlowSteps: true,
+      transitionsByScreen: true,
       visualImages: false,
       html: false,
       designerIntent: false,
@@ -814,7 +774,13 @@ async function createExport(mode) {
         "fills, strokes, radii, and effects",
         "prototype reactions",
       ],
-      derivedFields: ["region kind", "relative position labels", "reading order"],
+      derivedFields: [
+        "region kind",
+        "relative position labels",
+        "reading order",
+        "flow graph type",
+        "linear journey order",
+      ],
       notInferred: [
         "user goal",
         "design rationale",
@@ -825,7 +791,10 @@ async function createExport(mode) {
     },
     readingStrategy: [
       "Read manifest.json first.",
-      "Read flows.json to understand screen relationships.",
+      "Read flows.json and check each flow's graphType before interpreting its journey.",
+      "For linear flows, read orderedScreenIds and steps as the canonical journey order.",
+      "For branching, cyclic, or incomplete flows, follow transitionsByScreen and do not assume a linear order.",
+      "Treat screenIds as reachable screens in export order, not as journey order.",
       "Read only the relevant screens/*.json files for a design discussion.",
       "Treat extracted fields as Figma facts and derived fields as exporter classifications.",
       "Do not invent missing visual or product intent.",

@@ -6,7 +6,8 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const sourceRoot = path.join(projectRoot, "src");
 const outputRoot = path.join(projectRoot, "dist");
 
-const [code, template, zipScript, uiScript] = await Promise.all([
+const [flowGraph, code, template, zipScript, uiScript] = await Promise.all([
+  readFile(path.join(sourceRoot, "flow-graph.js"), "utf8"),
   readFile(path.join(sourceRoot, "code.js"), "utf8"),
   readFile(path.join(sourceRoot, "ui.template.html"), "utf8"),
   readFile(path.join(sourceRoot, "zip.js"), "utf8"),
@@ -22,11 +23,13 @@ const ui = template
   .replace("<!-- UI_SCRIPT -->", `<script>\n${uiScript}\n</script>`);
 
 await mkdir(outputRoot, { recursive: true });
+const pluginCode = `${flowGraph}\n${code}`;
+
 await Promise.all([
-  writeFile(path.join(outputRoot, "code.js"), code, "utf8"),
+  writeFile(path.join(outputRoot, "code.js"), pluginCode, "utf8"),
   writeFile(path.join(outputRoot, "ui.html"), ui, "utf8"),
 ]);
 
 process.stdout.write(
-  `Built dist/code.js (${Buffer.byteLength(code)} bytes) and dist/ui.html (${Buffer.byteLength(ui)} bytes)\n`,
+  `Built dist/code.js (${Buffer.byteLength(pluginCode)} bytes) and dist/ui.html (${Buffer.byteLength(ui)} bytes)\n`,
 );

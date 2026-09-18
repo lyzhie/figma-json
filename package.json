@@ -5,6 +5,7 @@
   "description": "Export selected Figma screens or all screens on the current page as an AI-readable JSON ZIP.",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/validate.mjs"
+    "test": "node scripts/validate.mjs",
+    "package:release": "node scripts/package-release.mjs"
   }
 }
