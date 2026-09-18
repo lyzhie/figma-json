@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs and coverage
+*.log
+coverage/
+.nyc_output/
+
+# Local Codex instructions and private test fixtures
+AGENTS.md
+testing/
+
+# Locally packaged release archives
+release/
+*.zip

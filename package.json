@@ -1,0 +1,10 @@
+{
+  "name": "figma-json",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Export selected Figma screens or all screens on the current page as an AI-readable JSON ZIP.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/validate.mjs"
+  }
+}

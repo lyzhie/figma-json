@@ -1,0 +1,509 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 20px;
+        color: var(--figma-color-text, #1f1f1f);
+        background: var(--figma-color-bg, #ffffff);
+        font-size: 13px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 24px;
+      }
+
+      .intro {
+        margin: 6px 0 18px;
+        color: var(--figma-color-text-secondary, #6b6b6b);
+        line-height: 18px;
+      }
+
+      .context {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--figma-color-bg-secondary, #f4f4f4);
+      }
+
+      .context strong {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .context span {
+        color: var(--figma-color-text-secondary, #6b6b6b);
+        white-space: nowrap;
+      }
+
+      .options {
+        display: grid;
+        gap: 10px;
+      }
+
+      .option {
+        width: 100%;
+        padding: 13px 14px;
+        text-align: left;
+        color: inherit;
+        border: 1px solid var(--figma-color-border, #d9d9d9);
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .option:hover {
+        background: var(--figma-color-bg-hover, #f1f1f1);
+      }
+
+      .option.selected {
+        border-color: var(--figma-color-border-selected, #0d99ff);
+        box-shadow: inset 0 0 0 1px var(--figma-color-border-selected, #0d99ff);
+      }
+
+      .option:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      .option-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-weight: 600;
+      }
+
+      .count {
+        font-variant-numeric: tabular-nums;
+        color: var(--figma-color-text-brand, #0d99ff);
+      }
+
+      .option-copy {
+        margin-top: 5px;
+        color: var(--figma-color-text-secondary, #6b6b6b);
+        line-height: 17px;
+      }
+
+      .privacy {
+        margin: 14px 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: var(--figma-color-text-secondary, #6b6b6b);
+        background: var(--figma-color-bg-secondary, #f4f4f4);
+        line-height: 17px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .primary {
+        flex: 1;
+        min-height: 38px;
+        border: 0;
+        border-radius: 8px;
+        color: #ffffff;
+        background: var(--figma-color-bg-brand, #0d99ff);
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .primary:hover { background: var(--figma-color-bg-brand-hover, #007be5); }
+      .primary:disabled { cursor: not-allowed; opacity: 0.45; }
+
+      .status {
+        min-height: 34px;
+        margin-top: 12px;
+        color: var(--figma-color-text-secondary, #6b6b6b);
+        line-height: 17px;
+      }
+
+      .status.error { color: var(--figma-color-text-danger, #f24822); }
+      .status.success { color: var(--figma-color-text-success, #14ae5c); }
+    </style>
+  </head>
+  <body>
+    <h1>Figma JSON</h1>
+    <p class="intro">Export AI-readable design structure and Prototype flow as a JSON ZIP.</p>
+
+    <div class="context">
+      <strong id="page-name">Current page</strong>
+      <span id="screen-summary">Loading…</span>
+    </div>
+
+    <div class="options" role="radiogroup" aria-label="Export scope">
+      <button class="option selected" id="selected-option" type="button" role="radio" aria-checked="true" data-mode="selection">
+        <span class="option-title">
+          <span>Selected screens</span>
+          <span class="count" id="selected-count">0</span>
+        </span>
+        <span class="option-copy">Export the selected screen roots. Child selections are promoted to their containing screen.</span>
+      </button>
+
+      <button class="option" id="page-option" type="button" role="radio" aria-checked="false" data-mode="page">
+        <span class="option-title">
+          <span>All screens on this page</span>
+          <span class="count" id="page-count">0</span>
+        </span>
+        <span class="option-copy">Export visible top-level Frames, Components, and Instances, including those directly inside Sections.</span>
+      </button>
+    </div>
+
+    <div class="privacy">Local-only export. No screenshots, image analysis, HTML generation, or network requests.</div>
+
+    <div class="actions">
+      <button class="primary" id="export-button" type="button">Download JSON ZIP</button>
+    </div>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <script>
+(function attachZipWriter(global) {
+  "use strict";
+
+  const encoder = new TextEncoder();
+  let crcTable = null;
+
+  function getCrcTable() {
+    if (crcTable) return crcTable;
+
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let value = n;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      }
+      crcTable[n] = value >>> 0;
+    }
+    return crcTable;
+  }
+
+  function crc32(bytes) {
+    const table = getCrcTable();
+    let crc = 0xffffffff;
+    for (let index = 0; index < bytes.length; index += 1) {
+      crc = table[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function writeU16(view, offset, value) {
+    view.setUint16(offset, value, true);
+  }
+
+  function writeU32(view, offset, value) {
+    view.setUint32(offset, value >>> 0, true);
+  }
+
+  function concat(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let cursor = 0;
+    for (const part of parts) {
+      output.set(part, cursor);
+      cursor += part.length;
+    }
+    return output;
+  }
+
+  function dosTimestamp(date) {
+    const year = Math.max(1980, date.getFullYear());
+    const time =
+      (date.getHours() << 11) |
+      (date.getMinutes() << 5) |
+      Math.floor(date.getSeconds() / 2);
+    const day =
+      ((year - 1980) << 9) |
+      ((date.getMonth() + 1) << 5) |
+      date.getDate();
+    return { time, day };
+  }
+
+  function makeLocalHeader(nameBytes, dataBytes, crc, timestamp) {
+    const buffer = new ArrayBuffer(30 + nameBytes.length);
+    const view = new DataView(buffer);
+    writeU32(view, 0, 0x04034b50);
+    writeU16(view, 4, 20);
+    writeU16(view, 6, 0x0800);
+    writeU16(view, 8, 0);
+    writeU16(view, 10, timestamp.time);
+    writeU16(view, 12, timestamp.day);
+    writeU32(view, 14, crc);
+    writeU32(view, 18, dataBytes.length);
+    writeU32(view, 22, dataBytes.length);
+    writeU16(view, 26, nameBytes.length);
+    writeU16(view, 28, 0);
+    const output = new Uint8Array(buffer);
+    output.set(nameBytes, 30);
+    return output;
+  }
+
+  function makeCentralHeader(nameBytes, dataBytes, crc, timestamp, localOffset) {
+    const buffer = new ArrayBuffer(46 + nameBytes.length);
+    const view = new DataView(buffer);
+    writeU32(view, 0, 0x02014b50);
+    writeU16(view, 4, 20);
+    writeU16(view, 6, 20);
+    writeU16(view, 8, 0x0800);
+    writeU16(view, 10, 0);
+    writeU16(view, 12, timestamp.time);
+    writeU16(view, 14, timestamp.day);
+    writeU32(view, 16, crc);
+    writeU32(view, 20, dataBytes.length);
+    writeU32(view, 24, dataBytes.length);
+    writeU16(view, 28, nameBytes.length);
+    writeU16(view, 30, 0);
+    writeU16(view, 32, 0);
+    writeU16(view, 34, 0);
+    writeU16(view, 36, 0);
+    writeU32(view, 38, 0);
+    writeU32(view, 42, localOffset);
+    const output = new Uint8Array(buffer);
+    output.set(nameBytes, 46);
+    return output;
+  }
+
+  function makeEndRecord(entryCount, centralSize, centralOffset) {
+    const buffer = new ArrayBuffer(22);
+    const view = new DataView(buffer);
+    writeU32(view, 0, 0x06054b50);
+    writeU16(view, 4, 0);
+    writeU16(view, 6, 0);
+    writeU16(view, 8, entryCount);
+    writeU16(view, 10, entryCount);
+    writeU32(view, 12, centralSize);
+    writeU32(view, 16, centralOffset);
+    writeU16(view, 20, 0);
+    return new Uint8Array(buffer);
+  }
+
+  function createZip(files, modifiedAt) {
+    if (!Array.isArray(files) || files.length === 0) {
+      throw new Error("ZIP requires at least one file.");
+    }
+    if (files.length > 65535) {
+      throw new Error("ZIP entry limit exceeded.");
+    }
+
+    const timestamp = dosTimestamp(modifiedAt || new Date());
+    const localParts = [];
+    const centralParts = [];
+    let localOffset = 0;
+
+    for (const file of files) {
+      if (!file || typeof file.path !== "string" || !file.path.trim()) {
+        throw new Error("Every ZIP entry requires a path.");
+      }
+
+      const safePath = file.path.replace(/^\/+/, "").replace(/\\/g, "/");
+      if (safePath.split("/").includes("..")) {
+        throw new Error(`Unsafe ZIP path: ${file.path}`);
+      }
+
+      const nameBytes = encoder.encode(safePath);
+      const dataBytes =
+        file.content instanceof Uint8Array
+          ? file.content
+          : encoder.encode(String(file.content ?? ""));
+
+      if (dataBytes.length > 0xffffffff) {
+        throw new Error(`ZIP entry is too large: ${safePath}`);
+      }
+
+      const checksum = crc32(dataBytes);
+      const localHeader = makeLocalHeader(nameBytes, dataBytes, checksum, timestamp);
+      const centralHeader = makeCentralHeader(
+        nameBytes,
+        dataBytes,
+        checksum,
+        timestamp,
+        localOffset,
+      );
+
+      localParts.push(localHeader, dataBytes);
+      centralParts.push(centralHeader);
+      localOffset += localHeader.length + dataBytes.length;
+    }
+
+    const centralDirectory = concat(centralParts);
+    return concat([
+      ...localParts,
+      centralDirectory,
+      makeEndRecord(files.length, centralDirectory.length, localOffset),
+    ]);
+  }
+
+  global.FigmaJsonZip = { createZip, crc32 };
+})(globalThis);
+
+</script>
+    <script>
+(function startUi() {
+  "use strict";
+
+  const state = {
+    mode: "selection",
+    exporting: false,
+    pageName: "Current page",
+    selectedCount: 0,
+    pageCount: 0,
+  };
+
+  const elements = {
+    pageName: document.getElementById("page-name"),
+    screenSummary: document.getElementById("screen-summary"),
+    selectedOption: document.getElementById("selected-option"),
+    pageOption: document.getElementById("page-option"),
+    selectedCount: document.getElementById("selected-count"),
+    pageCount: document.getElementById("page-count"),
+    exportButton: document.getElementById("export-button"),
+    status: document.getElementById("status"),
+  };
+
+  function send(message) {
+    parent.postMessage({ pluginMessage: message }, "*");
+  }
+
+  function setStatus(message, tone) {
+    elements.status.textContent = message || "";
+    elements.status.className = `status${tone ? ` ${tone}` : ""}`;
+  }
+
+  function chooseMode(mode) {
+    if (state.exporting) return;
+    if (mode === "selection" && state.selectedCount === 0) return;
+
+    state.mode = mode;
+    elements.selectedOption.classList.toggle("selected", mode === "selection");
+    elements.pageOption.classList.toggle("selected", mode === "page");
+    elements.selectedOption.setAttribute("aria-checked", String(mode === "selection"));
+    elements.pageOption.setAttribute("aria-checked", String(mode === "page"));
+    updateControls();
+  }
+
+  function updateControls() {
+    elements.pageName.textContent = state.pageName;
+    elements.selectedCount.textContent = String(state.selectedCount);
+    elements.pageCount.textContent = String(state.pageCount);
+    elements.screenSummary.textContent = `${state.pageCount} screen${state.pageCount === 1 ? "" : "s"}`;
+
+    elements.selectedOption.disabled = state.exporting || state.selectedCount === 0;
+    elements.pageOption.disabled = state.exporting || state.pageCount === 0;
+
+    if (state.selectedCount === 0 && state.mode === "selection") {
+      state.mode = "page";
+      elements.selectedOption.classList.remove("selected");
+      elements.pageOption.classList.add("selected");
+      elements.selectedOption.setAttribute("aria-checked", "false");
+      elements.pageOption.setAttribute("aria-checked", "true");
+    }
+
+    const activeCount = state.mode === "selection" ? state.selectedCount : state.pageCount;
+    elements.exportButton.disabled = state.exporting || activeCount === 0;
+    elements.exportButton.textContent = state.exporting
+      ? "Preparing ZIP…"
+      : `Download ${activeCount || ""} screen${activeCount === 1 ? "" : "s"} as JSON ZIP`;
+  }
+
+  function safeFilename(filename) {
+    return String(filename || "figma-json-export.zip")
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function downloadZip(files, filename) {
+    const bytes = globalThis.FigmaJsonZip.createZip(files);
+    const blob = new Blob([bytes], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = safeFilename(filename);
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return bytes.length;
+  }
+
+  elements.selectedOption.addEventListener("click", () => chooseMode("selection"));
+  elements.pageOption.addEventListener("click", () => chooseMode("page"));
+
+  elements.exportButton.addEventListener("click", () => {
+    const count = state.mode === "selection" ? state.selectedCount : state.pageCount;
+    if (count === 0 || state.exporting) return;
+    state.exporting = true;
+    updateControls();
+    setStatus(`Reading ${count} screen${count === 1 ? "" : "s"} from Figma…`);
+    send({ type: "EXPORT", mode: state.mode });
+  });
+
+  window.onmessage = (event) => {
+    const message = event.data && event.data.pluginMessage;
+    if (!message || typeof message.type !== "string") return;
+
+    if (message.type === "STATE") {
+      state.pageName = message.pageName || "Current page";
+      state.selectedCount = Number(message.selectedCount || 0);
+      state.pageCount = Number(message.pageCount || 0);
+      updateControls();
+      return;
+    }
+
+    if (message.type === "EXPORT_PROGRESS") {
+      setStatus(message.message || "Preparing export…");
+      return;
+    }
+
+    if (message.type === "DOWNLOAD_ZIP") {
+      try {
+        const zipSize = downloadZip(message.files, message.filename);
+        const kb = Math.max(1, Math.round(zipSize / 1024));
+        setStatus(
+          `Downloaded ${message.summary.screenCount} screens, ${message.summary.edgeCount} flow edges · ${kb} KB`,
+          "success",
+        );
+        send({ type: "DOWNLOAD_COMPLETE" });
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error), "error");
+      } finally {
+        state.exporting = false;
+        updateControls();
+      }
+      return;
+    }
+
+    if (message.type === "ERROR") {
+      state.exporting = false;
+      updateControls();
+      setStatus(message.message || "Export failed.", "error");
+    }
+  };
+
+  updateControls();
+  send({ type: "READY" });
+})();
+
+</script>
+  </body>
+</html>
