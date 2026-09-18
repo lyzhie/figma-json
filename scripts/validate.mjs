@@ -15,6 +15,10 @@ execFileSync(process.execPath, [path.join(projectRoot, "scripts/build.mjs")], {
   cwd: projectRoot,
   stdio: "inherit",
 });
+execFileSync(process.execPath, [path.join(projectRoot, "scripts/test-flow-graph.mjs")], {
+  cwd: projectRoot,
+  stdio: "inherit",
+});
 
 const manifest = JSON.parse(
   await readFile(path.join(projectRoot, "manifest.json"), "utf8"),
@@ -45,7 +49,8 @@ if (
   throw new Error("The plugin must not request network access.");
 }
 
-const [sourceCode, uiSource, zipSource, builtCode, builtUi] = await Promise.all([
+const [flowGraphSource, sourceCode, uiSource, zipSource, builtCode, builtUi] = await Promise.all([
+  readFile(path.join(projectRoot, "src/flow-graph.js"), "utf8"),
   readFile(path.join(projectRoot, "src/code.js"), "utf8"),
   readFile(path.join(projectRoot, "src/ui.js"), "utf8"),
   readFile(path.join(projectRoot, "src/zip.js"), "utf8"),
@@ -53,11 +58,14 @@ const [sourceCode, uiSource, zipSource, builtCode, builtUi] = await Promise.all(
   readFile(path.join(projectRoot, manifest.ui), "utf8"),
 ]);
 
+checkScript(flowGraphSource, "src/flow-graph.js");
 checkScript(sourceCode, "src/code.js");
 checkScript(uiSource, "src/ui.js");
 checkScript(zipSource, "src/zip.js");
 
-if (sourceCode !== builtCode) throw new Error("dist/code.js is stale.");
+if (`${flowGraphSource}\n${sourceCode}` !== builtCode) {
+  throw new Error("dist/code.js is stale.");
+}
 if (builtUi.includes("<!-- ZIP_SCRIPT -->") || builtUi.includes("<!-- UI_SCRIPT -->")) {
   throw new Error("dist/ui.html still contains build placeholders.");
 }
@@ -109,5 +117,5 @@ try {
 const codeSize = (await stat(path.join(projectRoot, manifest.main))).size;
 const uiSize = (await stat(path.join(projectRoot, manifest.ui))).size;
 process.stdout.write(
-  `Validation passed: manifest, JavaScript syntax, inline UI build, and ZIP integrity. Runtime ${codeSize + uiSize} bytes.\n`,
+  `Validation passed: manifest, flow graphs, JavaScript syntax, inline UI build, and ZIP integrity. Runtime ${codeSize + uiSize} bytes.\n`,
 );
