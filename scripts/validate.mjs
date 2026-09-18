@@ -109,5 +109,5 @@ try {
 const codeSize = (await stat(path.join(projectRoot, manifest.main))).size;
 const uiSize = (await stat(path.join(projectRoot, manifest.ui))).size;
 process.stdout.write(
-  `Validation passed: manifest, JavaScript syntax, inline UI build, ZIP integrity, and reference JSON. Runtime ${codeSize + uiSize} bytes.\n`,
+  `Validation passed: manifest, JavaScript syntax, inline UI build, and ZIP integrity. Runtime ${codeSize + uiSize} bytes.\n`,
 );
